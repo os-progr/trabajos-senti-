@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ver Tarea</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1 id="taskTitle">Cargando...</h1>
+            <p class="subtitle" id="taskTime"></p>
+        </header>
+
+        <div class="card">
+            <p id="taskDesc" style="margin-bottom: 2rem; color: var(--text-secondary);"></p>
+
+            <div id="mediaContainer" class="viewer-content">
+                <!-- Content will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const taskId = urlParams.get('id');
+
+        async function loadTask() {
+            if (!taskId) {
+                document.body.innerHTML = '<h1 style="color:white;text-align:center">404 - ID no encontrado</h1>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/task/${taskId}`);
+                if (!res.ok) throw new Error('Task not found');
+                const task = await res.json();
+
+                document.getElementById('taskTitle').textContent = task.title;
+                document.getElementById('taskDesc').textContent = task.description;
+                document.getElementById('taskTime').textContent = new Date(task.uploaded_at).toLocaleDateString() + ' ' + new Date(task.uploaded_at).toLocaleTimeString();
+
+                const container = document.getElementById('mediaContainer');
+                const fileUrl = `/files/${task.filename}`;
+
+                // --- VIDEO ---
+                if (task.mimetype.startsWith('video/')) {
+                    const video = document.createElement('video');
+                    video.src = fileUrl;
+                    video.controls = true;
+                    container.appendChild(video);
+
+                    // --- PDF ---
+                } else if (task.mimetype === 'application/pdf') {
+                    const object = document.createElement('object');
+                    object.data = fileUrl;
+                    object.type = 'application/pdf';
+                    object.style.width = '100%';
+                    object.style.height = '800px';
+                    object.style.borderRadius = '0.5rem';
+
+                    const fallback = document.createElement('p');
+                    fallback.innerHTML = `Tu navegador no puede previsualizar este PDF. <a href="${fileUrl}" class="download-link">Descárgalo aquí</a>.`;
+                    object.appendChild(fallback);
+
+                    container.appendChild(object);
+
+                    // --- DOCX (Word) ---
+                } else if (task.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                    // Contenedor para el documento
+                    const docContainer = document.createElement('div');
+                    docContainer.className = 'doc-viewer';
+                    docContainer.innerHTML = '<p style="text-align:center; color: var(--text-secondary);">Cargando visualización del documento...</p>';
+                    container.appendChild(docContainer);
+
+                    // Botón de descarga siempre visible
+                    const link = document.createElement('a');
+                    link.href = fileUrl;
+                    link.className = 'download-link';
+                    link.textContent = `Descargar Archivo Original (${task.original_name})`;
+                    link.download = task.original_name;
+                    container.appendChild(link);
+
+                    // Usar Mammoth para convertir a HTML
+                    try {
+                        const response = await fetch(fileUrl);
+                        const arrayBuffer = await response.arrayBuffer();
+                        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+                        docContainer.innerHTML = result.value;
+                    } catch (e) {
+                        console.error(e);
+                        docContainer.innerHTML = '<p style="color:red; text-align:center;">No se pudo previsualizar el documento. Por favor, descárgalo.</p>';
+                    }
+
+                    // --- OTROS ---
+                } else {
+                    const icon = document.createElement('div');
+                    icon.innerHTML = '📄';
+                    icon.style.fontSize = '4rem';
+                    icon.style.textAlign = 'center';
+                    container.appendChild(icon);
+
+                    const link = document.createElement('a');
+                    link.href = fileUrl;
+                    link.className = 'download-link';
+                    link.textContent = `Descargar Archivo (${task.original_name})`;
+                    link.download = task.original_name;
+                    container.appendChild(link);
+                }
+
+            } catch (err) {
+                console.error(err);
+                document.body.innerHTML = '<h1 style="color:white;text-align:center">Tarea no encontrada o eliminada</h1>';
+            }
+        }
+
+        loadTask();
+    </script>
+</body>
+
+</html>
